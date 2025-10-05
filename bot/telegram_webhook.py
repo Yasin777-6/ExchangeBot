@@ -25,16 +25,29 @@ logger = logging.getLogger(__name__)
 
 # Глобальная переменная для application
 _application = None
+_initialized = False
 
 def get_application():
     """Получить или создать application (lazy loading)"""
-    global _application
+    global _application, _initialized
     
     if _application is None:
         logger.info("Инициализация Telegram application...")
         _application = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
         setup_handlers(_application)
-        logger.info("Telegram application готов")
+        
+        # Initialize application synchronously
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        if not _initialized:
+            loop.run_until_complete(_application.initialize())
+            _initialized = True
+            logger.info("Telegram application инициализирован и готов")
     
     return _application
 
