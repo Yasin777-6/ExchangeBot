@@ -970,6 +970,159 @@ async def show_my_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
         await update.message.reply_text(item_text, parse_mode='Markdown')
 
+# Админские функции
+@sync_to_async
+def get_pending_items():
+    """Получить товары на модерации"""
+    items = Item.objects.filter(is_approved=False, is_active=True).select_related('merchant')[:20]
+    return list(items)
+
+async def show_pending_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать товары на модерации (для админов)"""
+    items = await get_pending_items()
+    
+    if not items:
+        await update.message.reply_text("✅ Нет товаров на модерации!")
+        return
+    
+    await update.message.reply_text(f"📋 **Товары на модерации ({len(items)}):**\n", parse_mode='Markdown')
+    
+    for item in items:
+        item_text = f"""
+📦 **{item.title}**
+
+📝 {item.description}
+💰 Цена: {item.price} руб.
+📂 Категория: {item.category}
+👤 Продавец: @{item.merchant.username or 'Анонимный'}
+🆔 ID товара: {item.id}
+"""
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Одобрить", callback_data=f"approve_item_{item.id}")],
+            [InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_item_{item.id}")]
+        ])
+        
+        await update.message.reply_text(item_text, parse_mode='Markdown', reply_markup=keyboard)
+
+@sync_to_async
+def get_recent_transactions(limit=10):
+    """Получить последние транзакции"""
+    transactions = Transaction.objects.select_related('client', 'merchant', 'item').order_by('-created_at')[:limit]
+    return list(transactions)
+
+async def show_transactions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать транзакции (для админов)"""
+    transactions = await get_recent_transactions()
+    
+    if not transactions:
+        await update.message.reply_text("📭 Нет транзакций.")
+        return
+    
+    trans_text = "📊 **Последние транзакции:**\n\n"
+    
+    status_emoji = {
+        TransactionStatus.PENDING_PAYMENT: '⏳',
+        TransactionStatus.PAYMENT_CONFIRMED: '✅',
+        TransactionStatus.ITEM_DELIVERED: '📦',
+        TransactionStatus.COMPLETED: '✔️',
+        TransactionStatus.CANCELLED: '❌'
+    }
+    
+    for t in transactions:
+        emoji = status_emoji.get(t.status, '❓')
+        trans_text += f"{emoji} **{t.item.title}**\n"
+        trans_text += f"   💰 {t.amount} руб. | 🆔 `{t.transaction_id}`\n"
+        trans_text += f"   👤 {t.client.username or 'Клиент'} → {t.merchant.username or 'Продавец'}\n"
+        trans_text += f"   📅 {t.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+    
+    await update.message.reply_text(trans_text, parse_mode='Markdown')
+
+@sync_to_async
+def get_users_stats():
+    """Получить статистику пользователей"""
+    from django.db.models import Count
+    
+    total_users = TelegramUser.objects.count()
+    clients = TelegramUser.objects.filter(role=UserRole.CLIENT).count()
+    merchants = TelegramUser.objects.filter(role=UserRole.MERCHANT).count()
+    admins = TelegramUser.objects.filter(role=UserRole.ADMIN).count()
+    
+    return {
+        'total': total_users,
+        'clients': clients,
+        'merchants': merchants,
+        'admins': admins
+    }
+
+async def show_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать пользователей (для админов)"""
+    stats = await get_users_stats()
+    
+    users_text = f"""
+👥 **Статистика пользователей:**
+
+📊 Всего: {stats['total']}
+🛍 Клиентов: {stats['clients']}
+💼 Продавцов: {stats['merchants']}
+⚙️ Админов: {stats['admins']}
+"""
+    
+    await update.message.reply_text(users_text, parse_mode='Markdown')
+
+@sync_to_async
+def get_general_stats():
+    """Получить общую статистику"""
+    from django.db.models import Sum, Count
+    
+    total_items = Item.objects.filter(is_active=True).count()
+    approved_items = Item.objects.filter(is_approved=True, is_active=True).count()
+    pending_items = Item.objects.filter(is_approved=False, is_active=True).count()
+    
+    total_transactions = Transaction.objects.count()
+    completed_transactions = Transaction.objects.filter(status=TransactionStatus.COMPLETED).count()
+    
+    total_revenue = Transaction.objects.filter(status=TransactionStatus.COMPLETED).aggregate(
+        total=Sum('amount')
+    )['total'] or 0
+    
+    total_fees = Transaction.objects.filter(status=TransactionStatus.COMPLETED).aggregate(
+        total=Sum('fee_amount')
+    )['total'] or 0
+    
+    return {
+        'total_items': total_items,
+        'approved_items': approved_items,
+        'pending_items': pending_items,
+        'total_transactions': total_transactions,
+        'completed_transactions': completed_transactions,
+        'total_revenue': total_revenue,
+        'total_fees': total_fees
+    }
+
+async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать статистику (для админов)"""
+    stats = await get_general_stats()
+    
+    stats_text = f"""
+📈 **Общая статистика:**
+
+**Товары:**
+📦 Всего: {stats['total_items']}
+✅ Одобрено: {stats['approved_items']}
+⏳ На модерации: {stats['pending_items']}
+
+**Транзакции:**
+📊 Всего: {stats['total_transactions']}
+✔️ Завершено: {stats['completed_transactions']}
+
+**Финансы:**
+💰 Оборот: {stats['total_revenue']:.2f} руб.
+💵 Комиссии: {stats['total_fees']:.2f} руб.
+"""
+    
+    await update.message.reply_text(stats_text, parse_mode='Markdown')
+
 # Обработчик текстовых сообщений
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстовых сообщений"""
@@ -994,6 +1147,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_my_sales(update, context)
     elif text == "ℹ️ Помощь":
         await help_command(update, context)
+    elif text == "✅ Одобрить товары":
+        await show_pending_items(update, context)
+    elif text == "📊 Транзакции":
+        await show_transactions(update, context)
+    elif text == "👥 Пользователи":
+        await show_users(update, context)
+    elif text == "📈 Статистика":
+        await show_statistics(update, context)
     elif text == "◀️ Назад":
         await update.message.reply_text(
             "Главное меню:",
