@@ -36,6 +36,9 @@ DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
+# Port for Railway
+PORT = int(os.getenv('PORT', 8000))
+
 # CSRF trusted origins (required for HTTPS reverse proxies like Railway)
 # Provide as comma-separated list in env CSRF_TRUSTED_ORIGINS, e.g.
 # CSRF_TRUSTED_ORIGINS=https://your-app.up.railway.app,https://example.com

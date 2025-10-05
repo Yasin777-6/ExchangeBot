@@ -17,8 +17,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from bot import views as bot_views
+from . import views
 
 urlpatterns = [
+    # Home & Health Check
+    path('', views.home, name='home'),
+    path('health/', views.health, name='health'),
+    
+    # Admin
     path('admin/', admin.site.urls),
     
     # Telegram Bot Webhook
