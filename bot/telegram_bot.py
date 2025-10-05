@@ -146,7 +146,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 За каждую продажу: +100 XP
 
-**Поддержка:** @support
+**Поддержка:** @atauq
 """
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
